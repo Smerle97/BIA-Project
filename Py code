@@ -4,7 +4,7 @@ import pandas as pd
 
 app = Flask(__name__)
 
-openai.api_key = "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"
+openai.api_key = ""
 
 # Load data from Excel file
 excel_data = pd.read_excel(r"C:\Users\smerl\Downloads\CollegeNavigator_Search New.xlsx")
