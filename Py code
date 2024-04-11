@@ -1,0 +1,176 @@
+from flask import Flask, render_template_string, request, jsonify
+import openai
+import pandas as pd
+
+app = Flask(__name__)
+
+openai.api_key = "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"
+
+# Load data from Excel file
+excel_data = pd.read_excel(r"C:\Users\smerl\Downloads\CollegeNavigator_Search New.xlsx")
+
+# Convert the data to a dictionary for easier access
+excel_data_dict = excel_data.to_dict()
+
+def get_response_from_excel(user_input):
+    # Check if the user input is in the Excel data
+    user_input_lower = user_input.lower()
+    for column in excel_data_dict:
+        if excel_data_dict[column] is not None and user_input_lower in [str(value).lower() for value in excel_data_dict[column].values()]:
+            # If found, retrieve the corresponding response from Excel
+            response = excel_data_dict["Response"][list(excel_data_dict[column].values()).index(user_input)]
+            return response
+    return None
+
+def custom_chat_gpt(user):
+    # Check if the response is available in Excel
+    excel_response = get_response_from_excel(user)
+    if excel_response:
+        # If available, return the response from Excel
+        chat_gpt_reply = excel_response
+    else:
+        # If not available, use OpenAI ChatCompletion
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "You are a College advisor"}, {"role": "user", "content": user}]
+        )
+        chat_gpt_reply = response["choices"][0]["message"]["content"]
+    return chat_gpt_reply
+
+@app.route('/')
+def index():
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot UI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .chat-box {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .chat-message {
+            margin: 5px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #e9e9e9;
+        }
+        .user-message {
+            background-color: #b3d4fc;
+            align-self: flex-end;
+        }
+        .bot-message {
+            background-color: #d7eafd;
+            align-self: flex-start;
+        }
+        .input-container {
+            display: flex;
+        }
+        .message-input {
+            flex-grow: 1;
+            padding: 10px;
+            margin-right: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chatbot</h1>
+        <div class="chat-box" id="chat-box"></div>
+        <div class="input-container">
+            <input type="text" id="user-input" class="message-input" placeholder="Type your message...">
+            <button onclick="sendMessage()" class="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        function sendMessage() {
+            var userInput = document.getElementById("user-input").value.trim();
+            if (userInput === '') {
+                return;
+            }
+
+            // Append user message to chat box
+            var chatBox = document.getElementById("chat-box");
+            var userMessageElement = document.createElement("div");
+            userMessageElement.className = "chat-message user-message";
+            userMessageElement.textContent = userInput;
+            chatBox.appendChild(userMessageElement);
+
+            // Clear input field
+            document.getElementById("user-input").value = '';
+
+            // Send message to server
+            fetch('/get_response', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({message: userInput}),
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Append bot response to chat box
+                var botMessageElement = document.createElement("div");
+                botMessageElement.className = "chat-message bot-message";
+                botMessageElement.textContent = data.response;
+                chatBox.appendChild(botMessageElement);
+
+                // Scroll to bottom of chat box
+                chatBox.scrollTop = chatBox.scrollHeight;
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+
+        // Submit user message on pressing Enter key
+        document.getElementById("user-input").addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/get_response', methods=['POST'])
+def get_response():
+    user_message = request.json['message']
+    response = custom_chat_gpt(user_message)
+    return jsonify({'response': response})
+
+if __name__ == '__main__':
+    app.run(debug=True)
